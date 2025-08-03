@@ -1,0 +1,164 @@
+---
+description: 
+globs: 
+alwaysApply: true
+---
+# rule: semantic
+
+## Description
+Guidelines for managing semantic projects including cubes, views, shared fields, and semantic layer operations in the reorc-mcp-client project.
+
+---
+
+## Semantic Project Download and Management
+
+### Local Semantic Project Operations
+When a user wants to fetch/download/obtain/refresh/work with semantic project locally:
+
+- **ALWAYS** use the CLI command to download semantic project to local:
+  ```bash
+  python3 cli.py project download-semantic-project <project_code>
+  ```
+- This command downloads the complete semantic project structure including:
+  - Cube definitions and configurations
+  - View definitions and field mappings
+  - Shared field definitions
+  - Cube relationships and dependencies
+  - Semantic layer metadata
+
+### When to Download Semantic Project
+
+Use `python3 cli.py project download-semantic-project <project_code>` when the user requests to:
+- "fetch semantic project"
+- "download semantic project" 
+- "obtain semantic project locally"
+- "refresh semantic project"
+- "work with semantic project locally"
+- "sync semantic project to local"
+- "get latest semantic project"
+- "pull semantic project"
+
+### Semantic Project Structure
+After downloading, the semantic project will contain:
+local-semantic-projects/<project_code>/
+├── main/                            # Current project (editable)
+│   ├── cubes/                       # Your cube definitions
+│   ├── views/                       # Your view definitions  
+│   └── shared_fields/               # Your shared field definitions
+└── external_projects/               # External projects (read-only)
+    └── <external_project_code>/
+        ├── cubes/                   # External cubes you can reference
+        └── shared_fields/           # External shared fields you can reference
+
+cube.yaml
+```yml
+cubes:
+- name: string      # readonly
+  table: string     # readonly
+  joins:            # editable
+  - join_cube: string
+    relationship: one_to_many/many_to_one/one_to_one
+    base_field: string
+    join_field: string
+
+  origin_dimensions:
+  - name: string             # readonly
+    label: string            # readonly
+    description: string      # editable
+    sql: string              # readonly
+    type: string             # readonly
+    primary_key: bool        # editable
+
+  dimensions:
+  - name: string             # readonly
+    label: string            
+    description: string
+    sql: string
+    type: integer/decimal/string/...
+    primary_key: bool
+
+  meansures:
+  - name: string             # editable
+    label: string
+    description: string
+    sql: string
+    type: integer/decimal/string/...
+    aggregation_type: sum/avg/custom/...
+```
+
+view.yaml
+```yaml
+views:
+- name: sale_report
+  cubes:
+  - name: cube_name                                    # internal cube
+    fields:
+    - field_name_1
+  - name: external_project_code.cube_name              # external cube
+    fields:
+    - field_name_2
+    - field_name_3
+  shared_fields:
+  - shared.project_code.shared_field_name_4            # internal shared field
+  - shared.external_project_code.shared_field_name_5   # external shared field
+```
+
+shared_field.yaml
+```yaml
+shared_fields:
+- name: shared.pjc.total_amount                  # shared.project_code.field_name
+  label: Total Amount
+  description: Total amount of the order
+  sql: project_code.cube_name.shared_field_name * cube_name.field_name
+  type: decimal
+  aggregation_type: sum
+```
+
+Note:
+- main: is current project, user works on this folder.
+- external_projects: the folder is READONLY, which includes cubes, shared_fields of other projects. Current project can use cubes and shared_fields of external projects.
+
+
+## Best Practices for Semantic Operations
+
+### Error Handling
+- If download fails, check:
+  1. Authentication token validity
+  2. Project code correctness
+  3. User access permissions to the semantic project
+  4. Network connectivity
+
+## Semantic Layer Components
+
+### Working with Cubes
+When a user wants to sync cubes to server:
+- Looking for cubes in local-model-projects/<project_code>/main/cubes/
+- Use `get_cubes_and_shared_fields` to see available cubes
+- Use `create_cube_from_models` or `create_cube_from_source_tables` to create new cubes
+    - New cube contains origin_dimensions
+- Use `update_cube` to modify cube fields and properties
+    - MUST NOT use fields of other cubes to create dimensions or measures in the cube, MUST use shared fields instead.
+- Use 'CUBE.field_name' to reference to other fields in the cube to write sql
+    - another_cube_name.field_name is NOT ALLOWED
+- Use `delete_cube` to remove cubes.
+    - If cube referenced in views or shared fields
+        - DONT attempt to delete references
+        - STOP and NOTIFY user: "Cube <cube_name> is referenced in <views or shared fields>."
+    - MUST ask user to confirm deletion, prompting with:
+      - "Are you sure you want to delete the cube <cube_name>? Type 'yes' to confirm, 'no' to cancel."
+
+### Working with Views  
+- When a user wants to sync views to server:
+    - Looking for views in local-model-projects/<project_code>/main/views/
+- Can use cubes and shared fields from external projects to create views
+
+### Working with Shared Fields
+- When a user wants to sync shared fields to server:
+    - Looking for shared fields in local-model-projects/<project_code>/main/shared_fields/
+- Can use cubes and shared fields from external projects to create shared fields
+- Use `get_cubes_and_shared_fields` to see available shared fields
+
+### Working with Cube Relationships
+- Use `create_cube_relationship` to define relationships between cubes
+- Use `delete_cube_relationship` to remove relationships
+- Can create relationships between cubes of main project and external projects

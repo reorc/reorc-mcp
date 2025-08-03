@@ -1,0 +1,201 @@
+---
+description: 
+globs: 
+alwaysApply: true
+---
+# Model Profiling / Profile model
+
+## Description
+Guidelines for profiling data models to assess data quality, distributions, and patterns.
+
+---
+
+## Data Retrieval for Profiling
+
+### Primary Data Sources:
+- First, retrieve model details using `get_model_details` (ref [model.mdc](mdc:.cursor/rules/model.mdc))
+- Extract profiling data from the response:
+  - Use `preview_data` for sample data if available
+  - Use `raw_table_columns` for column metadata
+  - Use `compiled_sql` if you need to understand the query structure
+
+### Fallback Method:
+- If `preview_data` is empty or unavailable in model details, call `build_model` (ref [model.mdc](mdc:.cursor/rules/model.mdc))
+- Extract sample data from the preview_model response
+
+## Profiling Approaches
+
+### Get model info:
+- use `get_model_details` to get model information if model info is not available
+
+### Using Profile model by sql
+- Use `profile_model_by_sql`:
+  ```python
+  profile_model_by_sql(
+    project_code="project_name", 
+    model_name="model_name",
+    content="profiling_sql", # Provide sql for profiling the model
+    limit=1000  # Adjust sample size as needed
+  )
+  ```
+- With `profile_model_by_sql` results, perform additional analysis:
+  - Count rows by type and group
+  - Calculate null percentages
+  - Identify min/max/mean values
+  - Create improvised histograms for key numeric columns
+
+## Analysis Guidelines
+
+### Sample Size Considerations
+- For large models, use reasonable sample sizes (1000-5000 rows)
+- Note when using samples rather than full data
+- Consider random sampling for more representative results
+
+### Key Metrics to Report
+1. **Row count** - Total number of records
+2. **Column statistics**:
+   - Data type
+   - Null count and percentage
+   - Unique value count
+   - Min/max/mean/median for numeric columns
+   - Most frequent values for categorical columns
+
+### Data Quality Checks
+- Highlight potential issues:
+  - Columns with > 10% null values
+  - Unexpected data types
+  - Outliers (values > 3 standard deviations)
+  - Inconsistent formatting
+  - Duplicate records
+
+### Visualization Guidelines
+- Format numeric distribution as ASCII histograms when possible
+- Use tables for categorical value frequency
+- Display statistics in clear, readable tables
+
+## Implementation Recommendations
+- Prioritize critical columns over comprehensive profiling
+- For large datasets, focus on key quality indicators
+- Provide context for why certain patterns might indicate issues
+
+## Updating Column Descriptions with Profiling Data
+
+### IMPORTANT: Never Create Temporary Profile Models
+- DO NOT create temporary models like `${model_name}_profile` or `${model_name}_profile_temp` to store profile data
+- ONLY store profile data directly in the current model's column descriptions
+- If there are any errors during the profiling or updating process, notify the user and ask if they want to:
+  1. Skip the profile data storage and continue with the process, or
+  2. Stop the process entirely to address the issue
+
+### ALWAYS Store Profile Results in Column Descriptions
+After displaying the profile summary for a model, ALWAYS update the column descriptions to store the profile data by following these steps:
+
+1. Format structured descriptions for each column based on profiling results:
+   - For numeric columns:
+   ```
+   {Descriptive explanation of column purpose}
+
+   PROFILE:
+   - Type: {data_type}
+   - Null: {null_percentage}%
+   - Unique: {unique_values_count} ({unique_percentage}%)
+   - Range: {min_value} to {max_value}
+   - Average: {avg_value} [if applicable]
+   - Distribution: {brief_distribution_summary}
+   ```
+
+   - For string/text columns:
+   ```
+   {Descriptive explanation of column purpose}
+
+   PROFILE:
+   - Type: string ({specific_type})
+   - Null: {null_percentage}%
+   - Unique: {unique_values_count} ({unique_percentage}%)
+   - Length: {min_length} to {max_length} characters (avg: {avg_length})
+   - Values include: {sample_of_common_values} [if applicable]
+   ```
+
+   - For date/timestamp columns:
+   ```
+   {Descriptive explanation of column purpose}
+
+   PROFILE:
+   - Type: {date_type}
+   - Null: {null_percentage}%
+   - Range: {earliest_date} to {latest_date}
+   - Distribution: {distribution_pattern_if_relevant}
+   ```
+
+   - For boolean columns:
+   ```
+   {Descriptive explanation of column purpose}
+
+   PROFILE:
+   - Type: boolean
+   - Null: {null_percentage}%
+   - Distribution: true: {true_percentage}%, false: {false_percentage}%
+   ```
+
+2. Call `update_model_columns` to store these descriptions in the model metadata:
+   ```python
+   update_model_columns(
+     project_code="project_code",
+     model_name="model_name",
+     plan_name="plan_name",  # Include if using a plan
+     update_payload=[
+       {
+         "name": "column_name_1",
+         "description": "formatted_description_1"
+       },
+       {
+         "name": "column_name_2",
+         "description": "formatted_description_2"
+       },
+       # Additional columns...
+     ]
+   )
+   ```
+
+3. After successfully updating column descriptions, confirm to the user that the profile data has been stored in the model metadata.
+
+### Error Handling for Profile Data Storage
+If an error occurs while trying to update column descriptions:
+1. Catch the error and display the specific issue to the user
+2. Ask the user explicitly: "Would you like to skip storing profile data and continue, or stop the process to address this issue?"
+3. Based on the user's response:
+   - If "skip": Continue with the next steps without storing profile data
+   - If "stop": Halt the process and provide guidance on how to address the issue
+
+### Example Implementation
+For a model with customer data, after profiling you would:
+
+1. Generate structured descriptions for each column like:
+   ```
+   "customer_id": "Unique identifier for the customer.\n\nPROFILE:\n- Type: integer (int4)\n- Null: 0%\n- Unique: 100%\n- Range: 1000 to 9999"
+   ```
+
+2. Update all column descriptions in a single call to `update_model_columns`
+
+3. Confirm success with: "Profile data has been stored in column descriptions for future reference."
+
+## Presentation Format
+
+### Example Basic Profile Output
+```
+MODEL PROFILE: customers (1250 rows)
+
+COLUMN STATISTICS:
+| Column       | Type    | % Null | Unique | Min     | Max     | Most Common     |
+|--------------|---------|--------|--------|---------|---------|-----------------|
+| customer_id  | INTEGER | 0.0%   | 1250   | 1       | 1250    | N/A             |
+| name         | STRING  | 2.4%   | 1220   | N/A     | N/A     | "John" (15)     |
+| signup_date  | DATE    | 5.6%   | 1100   | 2020-01 | 2023-05 | "2022-01" (45)  |
+| total_orders | INTEGER | 0.0%   | 74     | 0       | 120     | "1" (350)       |
+
+DISTRIBUTION: total_orders
+0-10:   ████████████████ (65%)
+11-20:  █████ (20%)
+21-30:  ███ (10%)
+31+:    █ (5%)
+```

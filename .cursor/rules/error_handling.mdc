@@ -1,0 +1,92 @@
+---
+description: 
+globs: 
+alwaysApply: true
+---
+# rule: error_handling
+
+## Description
+Guidelines for handling common errors when using MCP tools, requiring explicit user intervention before proceeding.
+
+---
+
+## Project Access Errors
+
+### When "Project not found" Error Occurs
+- Stop immediately and do not attempt to continue with alternative approaches
+- Inform the user clearly about the error: "The specified project could not be found"
+- Ask the user to confirm the correct project code or provide access
+- Do not include additional information about what will happen after the error is resolved
+- Include the tool call that generated the error
+- Do not run any additional MCP tools until the error is resolved
+- Example prompt: "I'm unable to access the project. Please confirm the correct project code or ensure you have access rights to this project."
+
+### When "Missing access token" Error Occurs
+- Stop immediately and do not attempt to continue with alternative approaches
+- Inform the user clearly about the authentication issue
+- Ask the user to refresh reorc-mcp in Cursor settings first
+- Do not include additional information about what will happen after the error is resolved
+- Do not ask clarifying questions about the user's task until the error is resolved
+- Include the tool call that generated the error
+- Do not run any additional MCP tools until the error is resolved
+- Example prompt: "Authentication is required. Please refresh reorc-mcp in Cursor settings first."
+
+### When "Failed to run data model" Error Occurs
+#### With sub-error "There is another running dev run"
+- IMPORTANT: DO NOT stop immediately; FIRST ask for user direction
+- Present the error to the user and clearly explain that another data model run is currently in progress
+- ALWAYS ask the user to choose between two options:
+  1. "stop" - Stop the other running dev run
+  2. "retry" - Retry the current operation after a short delay
+- Include the specific prompting: "Would you like me to 'stop' the other running data model or 'retry' this operation? Please respond with either 'stop' or 'retry'."
+- Based on user's response:
+  - If "stop": Use `stop_model_run` to stop the running dev run, then retry the original operation
+  - If "retry": Wait 3 seconds and then retry the operation
+- Include the tool call that generated the error
+- Do not run any additional MCP tools until the user has made a choice
+- Example prompt: "There is another data model run in progress. Would you like me to 'stop' the other running data model or 'retry' this operation? Please respond with either 'stop' or 'retry'."
+
+
+## MCP Tool Failure Handling
+
+### General Rule for MCP Tool Failures
+- If any MCP tool fails with an error, do not run additional MCP tools in the same response
+- Present the error from the failed tool call and wait for user resolution
+- Only proceed with additional MCP tool calls after the user has resolved the issue
+
+### Error Types That Trigger This Rule
+- Authentication errors
+- Project access errors
+- Permission errors
+- Resource not found errors
+- Network connectivity errors
+- Any other error that prevents successful completion of an MCP tool call
+
+## General Error Handling Approach
+
+1. **Identify error type** - Parse error messages to determine the specific issue
+2. **Stop processing** - Do not continue with alternative approaches or workarounds
+3. **Clear communication** - Explain the error in simple terms without technical jargon
+4. **Request specific action** - Tell the user exactly what they need to provide or action they need to take
+5. **Wait for resolution** - Do not proceed until the user has resolved the issue
+6. **Be concise** - Do not include additional information about next steps after error resolution
+7. **Include tool call** - Show the tool call that generated the error for troubleshooting
+8. **Avoid additional MCP calls** - Do not run other MCP tools after one has failed
+
+## Common Error Messages and Responses
+
+| Error Message | User Prompt |
+|---------------|-------------|
+| "Project not found" | "The project '{project_code}' could not be found. Please verify the project code is correct and that you have access to this project. Error from tool call: [tool call here]" |
+| "Missing access token" | "Authentication is required. Please try refreshing reorc-mcp in Cursor settings. Navigate to Settings > Extensions > Refresh next to reorc-mcp. Error from tool call: [tool call here]" |
+| "Error executing tool" | "There was an error executing the requested operation. Please check the error details and provide any required information to proceed. Error from tool call: [tool call here]" |
+| "There is another running dev run" | "There is another data model run in progress. Would you like me to 'stop' the other running data model or 'retry' this operation? Please respond with either 'stop' or 'retry'." |
+
+## Handling Sequence
+
+1. Log the exact error for reference
+2. Include the tool call that generated the error
+3. Present the error to the user in a concise message without technical jargon
+4. Request specific information or action from the user without additional context
+5. Do not run any additional MCP tools in the same response
+6. Only proceed after user has provided the required information or taken necessary action

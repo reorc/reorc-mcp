@@ -1,0 +1,219 @@
+---
+description: 
+globs: 
+alwaysApply: true
+---
+# rule: mcp_plan_generation
+
+## Description
+Instructions for creating, reviewing, and executing a data plan using MCP tools. This includes downloading the dbt project, listing raw sources, creating lineage, and awaiting user approval before executing.
+
+---
+
+## MANDATORY: Always generate local files BEFORE create_a_data_plan
+
+1. Generate local model preview files for user review
+**IMPORTANT** There are 2 types of model:
++ model_sources: created by tool: import_raw_table_as_source_models, their SQL: `select * from {{ source("raw_database_name", "raw_table_name") }}`
++ model_data: the models with SQL as content
+
+
+2. Explicitly tell the user where to find and review the files:
+   ```
+   I've generated model files for your review in:
+   local-model-projects/<project_code>/models/
+   ```
+
+3. Ask for explicit user approval before proceeding
+
+
+## When using tool: `create_a_data_plan`
+
+- always call CLI `python3 cli.py project download <project_code>` **before** `create_a_data_plan`, the downloaded dbt project must be used as local input context for planning
+- **PREFERRED**: Use CLI to list and cache raw sources:
+  ```bash
+  python3 cli.py project list-sources <project_code>
+  ```
+  This will cache sources locally and generate YAML files for easy reference
+- **Alternative**: Call tool `list_raw_sources` that list all current raw sources to prepare inputs for planning.
+
+## Input schema requirements
+
+- `create_a_data_plan` input must include `client_generated_lineage_data` as a **JSON object** (not string)
+- must follow schema `PlanLineageData` on MCP server
+
+## Sample input
+
+``` json
+{
+  "project_code": "dbt_project_1",
+  "business_need": "The business need of the project",
+  "client_generated_lineage_data": {
+    "models": [
+      {
+        "name": "customers",
+        "status": "new",
+        "layer": "source",
+        "description": "Customer data",
+        "columns": ["customer_id", "name"],
+        "direct_dependencies": []
+      },
+      {
+        "name": "orders",
+        "status": "existing",
+        "layer": "source",
+        "description": "Orders data",
+        "columns": ["order_id", "customer_id", "order_total"],
+        "direct_dependencies": []
+      },
+      {
+        "name": "stg_orders",
+        "status": "new",
+        "layer": "staging",
+        "description": "Standardized orders",
+        "columns": ["order_id", "customer_id", "order_total"],
+        "direct_dependencies": ["customers", "orders"]
+      }
+    ],
+    "dependencies": [
+      { "upstream": "customers", "downstream": "stg_orders" },
+      { "upstream": "orders", "downstream": "stg_orders" }
+    ]
+  }
+}
+
+## ouput of `create_a_data_plan` must include a ordered list of models need to be built
+- ordered built model list show be stored in 
+
+
+## Plan approval
+- After plan is created, ask user:
+    "Do you approve this plan?"
+    If approved:
+    ✅ proceed to execute the plan
+    If not approved:
+    ❌ ask for plan adjustments
+
+## Execution rules
+- sort model build order from left to right
+- do not call create_model or delete_model without user confirmation
+
+Plans should be executed systematically to ensure all components are built properly:
+
+1. First validate the plan exists and is valid
+2. Examine the plan nodes and dependencies
+3. Build the models in dependency order
+4. Report any build failures and provide troubleshooting
+
+## Showing Model Content from Local Project
+
+When reviewing or executing plans, **ALWAYS** display model content from the local project directory:
+
+1. After downloading the project with `python3 cli.py project download <project_code>`, examine the local files:
+   ```bash
+   # List models in the local project directory
+   ls -la local-model-projects/<project_code>/models/
+   ```
+
+2. When referencing a model in the plan, show its actual content to the user:
+   ```bash
+   # Display the content of a specific model
+   cat local-model-projects/<project_code>/models/<model_name>.sql
+   ```
+
+3. For each planned model, compare with existing local model if available:
+   - If the model exists locally, show the current implementation
+   - If it's a new model, clearly indicate it will be created
+   - If it's a modified model, show both current and planned versions
+
+4. Use examples from local models to guide the creation of new models:
+   - Show similar existing models as reference templates
+   - Identify coding patterns, naming conventions, and SQL style from local models
+
+5. When presenting the plan visualization, include a summary of:
+   - Models that exist locally (with path)
+   - Models that will be created (with planned content)
+   - Models that will be modified (with current and planned content)
+
+
+
+
+### Best Practices for Syncing Changes
+
+When pushing local changes to the server, follow these guidelines:
+
+1. **Always commit changes first**: Before pushing models to the server, commit your changes to git using the CLI commit command:
+
+```bash
+# Check what files have been modified
+python3 cli.py git status <project_code>
+
+# Commit changes with descriptive message
+python3 cli.py project commit <project_code> --message "Update models: $(date +%Y-%m-%d) - Sync to server"
+# OR use auto-generated message
+python3 cli.py project commit <project_code> --auto-commit "auto"
+```
+
+2. **Use MCP tools to sync to server**: After committing, use MCP tools to push changes to the server:
+
+```python
+# Use create_model for new models
+create_model(
+    project_code="your_project_code",
+    name="model_name",
+    content="model_sql_content"
+)
+
+# Use update_model for existing models
+update_model(
+    project_code="your_project_code", 
+    model_name="existing_model_name",
+    content="updated_sql_content"
+)
+```
+
+3. **Verify sync status**: Always verify that changes were successfully synced by checking the response and inspecting model details afterward.
+
+When a plan needs to be executed, follow this general workflow:
+
+1. Make sure local files are in sync with the server
+2. Review the plan structure and dependencies
+3. Build the plan or specific models
+4. Check model results after successful builds
+5. Handle any errors by fixing models and retrying builds
+
+## During plan execution
+
+- Models should be built in left-to-right order, starting from those with no dependencies to those that depend on others
+- Never call tool `delete_model` without user's explicit confirmation
+- Use model's name & model's code to build model -> save (`create_model`) -> build (`build_model`)
+    + if built ok -> **MUST profile model** -> **MUST update profile for model columns** -> directly use model results from build_model (preview_data, columns, compiled_sql) and profile data to report to user
+    + if built fail -> return errors
+
+
+## When using tools: `list_plans`, `get_plan_details`, or after plan creation `create_a_data_plan`
+
+- the Output of these tools need to always contain render ASCII diagram visualization for the full model flow
+- use `*` to highlight newly created models ("lineage_data.nodes[].entity_update_status" = "new" or "content.models[].status" = "new")
+- use `^` to highlight modified models ("lineage_data.nodes[].entity_update_status" = "modified" or "content.models[].status" = "modified")
+- use `~` to highlight models that will be deleted ("lineage_data.nodes[].entity_update_status" = "deleted" or "content.models[].status" = "deleted")
+
+### Example
+
+```text
+[orders *]         [customers *]         [order_items]   [products]   [locations]
+    |                |                     |              |            |
+    v                v                     v              v            v
+[stg_orders *]    [stg_customers *]   [stg_data, stg_data_2, ...]   [other staging]
+    |                |                     |              |            |
+    +-------+--------+                     +--------------+------------+
+            |                                        |                                         
+            v                                        v  
+            [int_customer_orders]                                  
+                        |                                           
+                        v                                           
+            [mart_customer_gmv] 
+
+```
+
+

@@ -1,0 +1,132 @@
+---
+description: 
+globs: 
+alwaysApply: true
+---
+# MCP TOOL: MODEL CURL
+
+## Description
+This rule defines how models should be managed and operated on.
+
+---
+
+## Model Creation Workflow
+- Before running `create_model`, show the SQL/Python content to the user for approval
+- Present only the model currently being created (not all planned models)
+- Allow user to review and edit the content before proceeding
+- Include a prompt: "Would you like to proceed with creating this model? You can make changes to it before continuing."
+- Then include the create_model tool call directly beneath the prompt
+- Format it properly so users can click "Run tool" when they approve
+
+## Model Update Workflow
+- Before running `update_model`, show the SQL/Python content to the user for approval
+- Present both the current and proposed model content for comparison
+- Allow user to review and edit the content before proceeding
+- Include a prompt: "Would you like to proceed with updating this model? You can make changes to it before continuing."
+- Then include the update_model tool call directly beneath the prompt
+- Format it properly so users can click "Run tool" when they approve
+
+## Renaming Models
+- When renaming a model, ALWAYS use the `update_model` function with the `new_model_name` parameter
+- If there is any error during the rename process, DO NOT delete the old model and create a new one with the new name
+- On error, report the issue and suggest troubleshooting steps without modifying the existing model. Then stopping the process
+
+## Creating Model
+- When creating models, ensure they have appropriate column names and data types
+- Always validate SQL syntax before saving
+- Follow DBT reference model rules when writing SQL content:
+  - For referencing source tables:
+    + For databases with schema support (PostgreSQL, Snowflake, Redshift, etc.):
+      ALWAYS use `{{ source("schema_name", "table_name") }}` syntax where schema_name is the actual schema
+    + For databases without schema support (MySQL, SQLite, etc.):
+      ALWAYS use `{{ source("database_name", "table_name") }}` syntax
+    + NEVER use direct database and schema references like `database.schema.table_name` (e.g., `playground.dbt_playground.stg_customers`)
+  - When determining what to use as the first parameter in source():
+    + If the "schema_name" field in list_raw_sources response is NOT null or empty, use that value
+    + If the "schema_name" field is null or empty, use the "database_name" value instead
+  - For referencing other dbt models: Always use `{{ ref("model_name") }}` syntax
+  - For Jaffle Shop project specifically: Use `{{ source("jaffle_shop_dev", "raw_table_name") }}`
+  - Examine local-model-projects directory to understand the database structure before writing SQL
+  - Use the appropriate database dialect and syntax based on the project's underlying database
+  - NEVER use explicit database/schema names as they may change across environments
+  - Include appropriate column type casting and data transformations where needed
+  - Write clean, well-commented SQL with proper indentation
+  - Leverage dbt's built-in macros for common transformations when available
+
+## Source References
+- For raw tables, ALWAYS use `{{ source("schema_name", "table_name") }}` syntax
+- For Jaffle Shop project specifically, use `{{ source("jaffle_shop_dev", "raw_table_name") }}`
+- For other models, use `{{ ref("model_name") }}` syntax
+- NEVER use `ref()` to reference raw data tables
+- NEVER use `source()` to reference models
+- NEVER use direct database and schema references like `database.schema.table_name` (WRONG: `playground.dbt_playground.stg_customers`)
+- ALWAYS use dbt jinja references for all table references (CORRECT: `{{ source("dbt_playground", "stg_customers") }}`)
+- Always validate references before creating models
+
+## Deleting model
+- ALWAYS ask for user confirmation before deleting ANY model (not just those referenced by others)
+- Present the model details and specifically ask: "Are you sure you want to delete this model? Please respond with 'yes' to confirm deletion."
+- Waiting for user explicit confirmation with "yes" before performing any deletion operations
+- If the user provides any other response, do not delete the model
+- When a model is referenced by others, clearly warn the user about potential downstream impacts before asking for confirmation
+
+## Building model
+- When building a model, use the `build_model` function
+```python
+   # This is an MCP AI tool that now returns results directly
+   build_result = build_model(
+     project_code="dbt_project_1",
+     model_name="stg_orders",
+     plan_name="plan_name"
+   )
+```
+- On success:
+  1. Describe model results: preview_data, columns, compiled sql
+  2. Profile the model in detail following the `model_profiling.mdc` guidelines
+  3. Describe the model columns profile
+  4. Continue to profile the model and follow [model_profiling.mdc](mdc:.cursor/rules/model_profiling.mdc)
+- On error, report the issue and suggest troubleshooting steps
+
+## Previewing model table
+- NOT use to profile model data, use `preview_sql` and follow [model_profiling.mdc](mdc:.cursor/rules/model_profiling.mdc) to profile model
+- When previewing a model, use the `preview_model` function
+  ```python
+  preview_model(
+    project_code="project_name",
+    model_name="model_name",
+    content=None,
+    limit=100
+  )
+  ```
+- On success, describe model: preview_data, columns, compiled sql
+- On error, report the issue and suggest troubleshooting steps
+
+## Getting model details
+- When getting model details, use the `get_model_details` function
+- Provide `plan_name` parameter if the current context is in a plan or if the user requires a specific plan
+- If the model is not found (error response):
+  1. Inform the user that the specified model does not exist
+  2. Use `list_models` to show available models in the project
+  3. Do NOT attempt to guess or correct the model name
+  4. Stop processing and wait for the user to specify a valid model name
+
+## Running Model
+- When running a model, use the `run_model` function
+- Always use proper IANA timezone format (e.g., "Asia/Bangkok" instead of "UTC+7")
+- The timezone must reflect the user's current timezone
+- IMPORTANT: NEVER INTERRUPT A MODEL RUN once started
+- When making a run_model call:
+  1. MUST wait for the tool to complete execution and return a result
+  2. NEVER make another run_model call if the first one is still in progress
+  3. If the execution time is long, inform the user that the model is running and to wait for completion
+  4. Only proceed with other actions after getting a definitive result from the run_model call
+- On success, a model run ID is returned
+- On error, check the error message for troubleshooting:
+  - If "Invalid timezone" error, use a valid IANA timezone name
+  - If "There is another running dev run" error, ask user if they want to stop it or retry
+
+## Stopping Model Run
+- When stopping a model run, use the `stop_model_run` function
+- Use this when there's an existing model run in progress that the user wants to stop
+- Always notify the user that the current model run has been stopped successfully
+- After stopping, provide options to the user for the next steps (e.g., start a new run)

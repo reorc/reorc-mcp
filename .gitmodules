@@ -1,0 +1,4 @@
+[submodule "local-model-projects"]
+    path = local-model-projects
+    url = ./local-model-projects
+    ignore = all

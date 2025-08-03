@@ -1,0 +1,95 @@
+---
+description: mention about models, dbt, test cases
+globs: 
+alwaysApply: false
+---
+# Model Test Case Creation Rules
+
+## Overview
+This document outlines the standard process for creating test cases for data models in our system. Following these steps ensures comprehensive test coverage and consistent test case implementation.
+
+## Process
+
+### 1. Verify Model Column Existence
+- Before proceeding with test case creation, verify that the model has columns
+- Use the `get_model_details` tool to examine model structure
+- If the model has no columns, skip the test case creation process entirely
+- Inform the user that test cases cannot be created for models without columns
+- Only proceed to the next steps if the model has one or more columns
+
+### 2. Check Available Test Case Templates
+- Use the `get_test_case_templates` tool to retrieve all available test case templates
+- Review template options to select appropriate tests for your model
+- Note required parameters for each template type
+- Examples include not_null tests, uniqueness tests, freshness tests, etc.
+
+### 3. Profile the Model
+- Use `get_model_details` tool to examine model structure, columns, and data types
+- Use `preview_model` tool to inspect sample data and understand value distributions
+- Identify critical columns that require testing (primary keys, business metrics, etc.)
+- Note any data quality concerns visible in the sample data
+
+### 4. Document Planned Test Cases
+- Create a list of required test cases with:
+  - Test name (descriptive of what is being tested)
+  - Test description (business purpose and importance)
+  - Template to be used
+  - Target column(s)
+  - Parameters and conditions
+  - Severity level (error vs. warning)
+
+### 5. User Approval Process
+- Present the planned test cases to the user for review
+- Provide clear explanations for why each test is recommended
+- Ask the user to explicitly approve, reject, or request modifications for each test case
+- Continue requesting feedback until the user approves the test plan
+- Document all user feedback and changes made to the test plan
+- Only proceed to test creation after receiving explicit approval for each test
+
+### 6. Create Test Cases Systematically
+- Implement approved test cases one by one using the `create_test_case` tool
+- Start with fundamental tests (not_null, uniqueness) before complex tests
+- Set appropriate severity levels based on business impact
+- Document each test case creation attempt
+- **IMPORTANT**: The `payload` parameter must be a dictionary (JSON object) with the following structure:
+- Input test case configuration to parameters basd on mcp_rule
+  ```json
+  {
+    "template_key": "dbt_expectations.expect_column_values_to_not_be_null",
+    "parameters": {"target_column": ["column id in string"], "conditions": {"conditions": "1=1"}, ...},
+    "name": "test_name",
+    "description": "Test description",
+    "category": "completeness",
+    "severity": null
+  }
+  ```
+- The server will convert this dictionary to a `MCPTestCaseCreate` object internally
+
+### 7. Error Handling
+- If a test case creation fails, capture the exact error message
+- Do not abort the entire test case creation process
+- Continue creating remaining test cases
+- Keep a log of both successful and failed test cases
+
+### 8. Review and Troubleshooting
+- Produce a summary report with:
+  - Successful test cases (name, description, type)
+  - Failed test cases (name, attempted configuration, error message)
+  - Suggested fixes for failed test cases
+  - Overall test coverage assessment
+
+## Best Practices
+- Test critical business columns with multiple test types
+- Use conditions to exclude known exceptions
+- Set appropriate severity levels based on business impact
+- Document the purpose of each test clearly
+- Ensure test cases align with data quality standards
+- Review test results regularly and update tests as needed
+
+## Common Test Types
+- Not Null Tests: Ensure required fields contain values
+- Uniqueness Tests: Check for duplicate values in key columns
+- Freshness Tests: Verify data is current within defined timeframes
+- Range Tests: Validate values fall within expected boundaries
+- Relationship Tests: Confirm referential integrity between models
+- Pattern Tests: Verify text values match expected formats

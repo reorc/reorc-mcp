@@ -1,0 +1,14 @@
+# ReOrc MCP Client Dependencies
+
+# HTTP requests for API communication
+requests>=2.28.0
+
+# YAML processing for source database caching
+PyYAML>=6.0
+
+# JSON handling and file operations are handled by Python standard library
+# subprocess, os, sys, time, re, tarfile, shutil, tempfile are all standard library
+
+# Optional: For development and testing
+# pytest>=7.0.0
+# pytest-cov>=4.0.0

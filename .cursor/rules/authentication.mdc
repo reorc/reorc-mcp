@@ -1,0 +1,88 @@
+---
+description: 
+globs: 
+alwaysApply: true
+---
+# rule: authorization
+
+## Description
+This rule defines how to automatically extract the access token from the MCP configuration file and handle authentication.
+
+---
+
+## Access Token Extraction
+
+The CLI handles access token extraction automatically. This happens in the following way:
+
+1. The access token is extracted from the file `[PROJECT_ROOT]/.cursor/mcp.json`
+2. The token is embedded in the URL parameter `access_token=` in the server URL
+3. When needed, the token is automatically refreshed using default credentials
+
+### Example Configuration Structure
+```json
+{
+  "mcpServers": {
+    "reorc-mcp": {
+      "transport": "sse",
+      "url": "https://mcp.test.reorc.cloud/mcp?access_token=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxNzcxODI2OTM2MDQ3ODYxNzYiLCJ0aWQiOiIxNzcxODI5NDE1ODk4NTYyNTYiLCJhaWQiOiIxNzcxODI2OTM2MDQ3ODYxNzYiLCJleHAiOjE3NDk1NDk3MDh9.Cf2Jy2jU8gz-_e6pk__Kyz4_f9sbqHX6SWaAu_vOXxA"
+    }
+  },
+  "auth": {
+    "defaultCredentials": {
+      "email": "dev@reorc.ai",
+      "password": "dev",
+      "tenant_domain": "recurve-dev"
+    }
+  }
+}
+```
+
+## Handling Authentication
+
+use the reorc-mcp-client CLI auth:
+
+```bash
+# Validate your current token
+python3 cli.py auth validate
+
+# Login and get a new token and then update `[PROJECT_ROOT]/.cursor/mcp.json` 
+python3 cli.py auth login
+```
+
+These commands handle the complete authentication workflow including:
+- Extracting tokens from configuration files
+- Validating tokens with the server
+- Obtaining new tokens when needed
+- Updating configuration files
+- Using default credentials when available
+
+## MANDATORY: Validating the Token
+
+Always validate your token before performing operations:
+
+```bash
+# Validate the token
+python3 cli.py auth validate
+
+# If validation fails, login to get a new token
+python3 cli.py auth login
+```
+
+## Handling Expired, Invalid, or Empty Access Tokens
+
+If you encounter authentication errors:
+
+```bash
+# Login to refresh your token
+python3 cli.py auth login
+
+# Or login with specific credentials
+python3 cli.py auth login --email user@example.com --password mysecret --tenant example
+```
+
+This will:
+1. Attempt to use default credentials from the config file if available
+2. Prompt for credentials if needed
+3. Obtain a new token
+4. Update the configuration file
+5. Validate the new token

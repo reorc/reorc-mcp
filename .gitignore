@@ -1,0 +1,14 @@
+local-cache/*
+
+# Cursor history
+.history/*
+/local-model-projects/*
+/local-source-databases/*
+/local-semantic-projects/*
+**/__pycache__
+
+.idea
+.vscode
+docs.html
+openapi.json
+mcp.json

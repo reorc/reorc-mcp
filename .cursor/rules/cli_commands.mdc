@@ -1,0 +1,84 @@
+---
+description: 
+globs: 
+alwaysApply: true
+---
+# rule: cli_commands
+
+## Description
+Guidelines for running CLI commands in the reorc-mcp-client project.
+
+---
+
+## CLI Command Execution
+
+### Base Path Requirements
+- ALWAYS run CLI commands from the project root: `./reorc-mcp-client`
+
+### Command Structure
+- All CLI commands should be run using the pattern: `python3 cli.py <operation> <command> [arguments]`
+- Example: `python3 cli.py git status dbt_advanced_test`
+
+### Common CLI Operations
+1. **Authentication Operations**:
+   ```bash
+   # Validate token
+   python3 cli.py auth validate
+   
+   # Login
+   python3 cli.py auth login
+   ```
+
+2. **File Operations**:
+   ```bash
+   # List files
+   python3 cli.py file list <project_code> [--path <directory>]
+   
+   # Read file
+   python3 cli.py file read <project_code> <file_path>
+   
+   # Write file
+   python3 cli.py file write <project_code> <file_path> [--content "content"]
+   ```
+
+3. **Git Operations**:
+   ```bash
+   # Get status
+   python3 cli.py git status <project_code>
+   
+   # Commit changes
+   python3 cli.py git commit <project_code> "<message>"
+   ```
+
+4. **Project Operations**:
+   ```bash
+   # Download project locally
+   python3 cli.py project download <project_code>
+   
+   # List and cache raw data sources (PREFERRED for source discovery)
+   python3 cli.py project list-sources <project_code>
+   
+   # Refresh sources from database
+   python3 cli.py project refresh-sources <project_code>
+   
+   # Commit local changes to git (REQUIRED before using MCP tools to sync to server)
+   python3 cli.py project commit <project_code> --message "Your commit message"
+   python3 cli.py project commit <project_code> --auto-commit "auto"  # Auto-generated message
+   python3 cli.py project commit <project_code> --models model1,model2 --message "Update specific models"
+   ```
+
+### Error Handling
+- If a command fails, check if:
+  1. You're in the right directory (root project directory)
+  2. The authentication token is valid (use `auth validate`)
+  3. Project code, file paths, or other arguments are correct
+
+### Best Practices
+- Always validate token before performing the first operations
+- When in doubt about command syntax, use `python3 cli.py <operation> --help`
+- For complex file paths, use absolute paths if possible
+- **ALWAYS commit changes locally before syncing to server**:
+  1. Use `python3 cli.py project commit <project_code>` to commit local changes
+  2. Then use MCP tools (create_model, update_model) to sync individual models to server
+- Always use descriptive commit messages or use the --auto-commit flag to generate a timestamped message
+- After syncing changes, verify the changes were applied correctly by checking model details

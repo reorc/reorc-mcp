@@ -1,0 +1,51 @@
+---
+description: 
+globs: 
+alwaysApply: true
+---
+# rule: request_classifier
+
+## Description
+Classifies incoming user requests into metric management or data operation types to guide the AI's approach.
+
+---
+
+## Request Classification Types
+
+### Metric Management Type
+Requests about business metrics, KPIs, dashboards, and analytics outcomes.
+
+**Indicators:**
+- Mentions of KPIs, metrics, dashboards
+- Business analytics terminology
+- Performance measurement
+- Reporting requirements
+- Business outcomes and goals
+
+**Examples:**
+- "I need a dashboard showing daily sales performance by region"
+- "Help me track customer retention metrics"
+- "Create a profitability analysis for our product lines"
+
+### Data Operation Type
+Requests about data manipulation, structure, and technical operations.
+
+**Indicators:**
+- Mentions of fields, columns, schedules
+- Data refresh operations
+- Rename or remove operations
+- Technical database terminology
+- Data transformations
+- Schema modifications
+
+**Examples:**
+- "Rename the customer_id field to user_id"
+- "Schedule a daily refresh of the inventory table"
+- "Add a new column for tax calculation"
+
+## Classification Process
+
+1. Analyze the incoming request text
+2. Look for keywords and context that match either type
+3. If both types appear present, prioritize the dominant intent
+4. Pass the classification result to the clarify_prompt_engine for appropriate follow-up

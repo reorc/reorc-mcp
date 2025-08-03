@@ -1,0 +1,71 @@
+---
+description: 
+globs: 
+alwaysApply: true
+---
+# rule: clarify_prompt_engine
+
+## Description
+Guides the AI in asking appropriate clarifying questions based on request type and completeness of information.
+
+---
+
+## Metric Management Request Handling
+
+### Scoring System for Request Clarity (0-100 points)
+- KPIs/metrics mentioned (e.g., "sales", "profit") → +10 points
+- Entities mentioned (e.g., "region", "product") → +10 points
+- Timeframes mentioned → +10 points
+- Data sources mentioned → +20 points
+- Data assets mentioned (model, cube, view, pipeline) → +20 points
+- Clear business goal articulated → +30 points
+
+### Required Information Elements
+1. **Business Objectives**: What the user wants to achieve (analytics, reporting, model building)
+2. **Metric Definition**: Specific KPIs or metrics that matter
+3. **Granularity Level**: Required level of detail ("Daily sales by product" vs "Monthly by region")
+4. **Target Entities**: Dimensions to model and analyze
+5. **Time Range**: Specific time period or rolling window
+6. **Data Sources**: (Optional) Known data sources
+7. **Related Data Assets**: (Optional) Known models, cubes, views, or pipelines
+
+### Decision Logic
+- **Score ≥ 80 points**: Sufficient information to proceed
+  - Generate and execute plan autonomously
+  - Summarize plan before execution for user confirmation
+  
+- **Score < 80 points**: Insufficient information
+  - Ask targeted clarifying questions for missing elements
+  - Prioritize questions about business objectives and metrics first
+  - Then ask about entities, granularity, and time ranges
+  - Finally ask about data sources if still unclear
+
+## Data Operation Request Handling
+
+### Required Information Elements
+1. **Operation Type**: What action is needed (rename, refresh, add, modify)
+2. **Target Objects**: Specific tables, fields, or data assets to modify
+3. **Operation Details**: Specific changes, new values, or parameters
+4. **Schedule/Timing**: When or how often the operation should run (if applicable)
+
+### Decision Logic
+- Scan all relevant tools that match the operation type
+- Identify missing information needed for selected tools
+- Ask clarifying questions focused on operation requirements
+- Execute operation once all required parameters are confirmed
+
+## Example Clarifying Questions
+
+### For Metric Management
+- "Which specific KPIs or metrics are most important for your analysis?"
+- "At what granularity do you need this data? (daily, weekly, monthly, etc.)"
+- "Which business entities would you like to analyze? (products, regions, customers)"
+- "What time period should this analysis cover?"
+- "Are there specific data sources you're aware of that contain this information?"
+- "Are there specific data model/pipeline/cube/view you're aware of that I should modify?"
+
+### For Data Operations
+- "Which specific table or field needs to be modified?"
+- "What is the new name/value you want to assign?"
+- "How often should this operation run?"
+- "Are there dependencies I should be aware of before making this change?"
