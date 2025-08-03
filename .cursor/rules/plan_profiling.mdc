@@ -1,0 +1,225 @@
+---
+description: 
+globs: 
+alwaysApply: true
+---
+# rule: plan-profiling
+
+## Description
+This rule defines how to profile model in a plan
+
+---
+
+## MANDATORY Model Profiling and Column Description Updates
+
+For EACH successfully built model during plan execution:
+
+1. **PROFILE THE MODEL (MANDATORY)**: 
+   - Parse the raw_table_columns from build_model results
+   - Analyze column types, null values, and distributions
+   - Generate detailed profile statistics for each column
+   - Format as clear tables with column stats and distributions
+
+2. **UPDATE COLUMN DESCRIPTIONS WITH PROFILE DATA (MANDATORY)**:
+   - Format structured descriptions for each column that include both business context and profile data
+   - Always include profile details: type, null percentage, unique values, and value ranges
+   - Call `update_model_columns` with formatted descriptions for all columns
+   - Example format for descriptions:
+   ```
+   Column business purpose description.
+   
+   PROFILE:
+   - Type: string/number/date/etc
+   - Null: x%
+   - Unique: y values (z%)
+   - Range: min to max [for numeric/date]
+   - Distribution: brief stats summary
+   ```
+
+3. **VERIFY COLUMN DESCRIPTIONS WERE UPDATED**:
+   - Make a follow-up call to get_model_details to verify column descriptions were saved
+   - If update failed, retry once before continuing
+
+## Plan Model Build Progress Updates
+
+- Before calling `update_plan_model_build_progress`, provide a clear description of:
+  - The model being updated
+  - The current status and the new status change
+  - Any preview data or error messages being added
+  - Example:
+
+```
+Updating build progress for model `stg_customers`:
+- Setting status from "in_progress" to "completed"
+- Adding preview data with columns: customer_id, customer_name, email, address, join_date
+```
+
+## Dataset Impact Analysis After Plan Details
+
+- After calling `get_plan_details`, provide a summary of data impact:
+  - List all models that will be created (new models)
+  - List all models that will be modified (if applicable)
+  - List all models that will be deleted (if applicable)
+
+
+# Plan Execution - Building Models in the Correct Order
+
+## Direct Model Building Strategy
+
+When executing a plan, you MUST follow this process for each model that needs to be built:
+
+1. Get the build order from the plan
+2. For each model in the build order:
+   - Mark the model as `IN_PROGRESS` in the plan
+   - Build the model using the `build_model` tool, which now returns results directly:
+     - compiled SQL
+     - preview data
+     - column information
+   - Once complete:
+     - If successful:
+       - **MANDATORY**: Follow the "Building model" section in @model.mdc for post-build steps
+       - **MANDATORY**: Profile the model following @model_profiling.mdc guidelines
+       - **MANDATORY**: Update column descriptions with profile data as described in @model_profiling.mdc
+       - Update the plan with `COMPLETED` status and the preview data
+     - If failed, retry after 3 seconds, if still failed, update the plan with `FAILED` status and error message
+   - Proceed to the next model in the build order
+
+## Model Building, Profiling, and Column Description Updates
+
+When building models during plan execution, you MUST follow these steps:
+
+1. **Build the model**: Follow the "Building model" section from @model.mdc
+   - This will return the model results directly (preview_data, columns, compiled SQL)
+
+2. **Profile the model (MANDATORY)**: Follow guidelines in @model_profiling.mdc
+   - Profile data using the data returned from `build_model` 
+   - Generate detailed statistics and analysis
+   - Format results in clear tables with column stats and distributions
+   - **NEVER SKIP THIS STEP FOR ANY MODEL**
+
+3. **Update column descriptions (MANDATORY)**: Follow the "Updating Column Descriptions with Profiling Data" section in @model_profiling.mdc
+   - Format structured descriptions with profile data
+   - Use `update_model_columns` to store descriptions in model metadata
+   - **ALWAYS INCLUDE PROFILE DATA IN DESCRIPTIONS**
+   - **NEVER SKIP THIS STEP FOR ANY MODEL**
+
+4. **Update plan status**: Update the plan with the completed status and preview data
+
+## Direct API Endpoints vs MCP Tools
+
+There are two types of operations in the MCP system:
+
+1. **Direct API Endpoints** - Can be called using standard HTTP requests like curl
+
+2. **MCP Tools** - Can only be used by the MCP AI Agent, not directly callable with curl
+   - Examples: `get_plan_details`, `update_plan_model_build_progress`, `build_model`
+
+## Complete Example Workflow
+
+For a client implementing the plan execution:
+
+1. Use the MCP AI Agent to get plan details with the `get_plan_details` tool
+
+2. For each model in the build order:
+   
+   a. Use the MCP AI Agent to mark the model as in-progress:
+   ```python
+   # CORRECT FORMAT for the update_plan_model_build_progress tool
+   # Notice that all parameters are properly provided as top-level keys
+   update_plan_model_build_progress(
+     plan_id="36055042639125708",
+     model_name="stg_products",
+     status="in_progress",
+     # Optional parameters
+     error_message=None,
+     preview_data=None
+   )
+   ```
+   
+   b. Build the model following the "Building model" section in @model.mdc
+      - Use the `build_model` tool to build the model and get results directly
+
+   c. **MANDATORY**: Profile the model following guidelines in @model_profiling.mdc
+      - Generate detailed statistics and analysis from the build results
+      - Format structured descriptions with profile data
+      - Example column profiling output:
+      ```
+      COLUMN STATISTICS:
+      | Column       | Type    | % Null | Unique | Min     | Max     | Most Common     |
+      |------------- |---------|--------|--------|---------|---------|-----------------|
+      | customer_id  | INTEGER | 0.0%   | 1250   | 1       | 1250    | N/A             |
+      | name         | STRING  | 2.4%   | 1220   | N/A     | N/A     | "John" (15)     |
+      ```
+
+   d. **MANDATORY**: Update column descriptions following @model_profiling.mdc
+      - Use `update_model_columns` to store profile data in model metadata
+      - Example column description payload:
+      ```python
+      update_model_columns(
+        project_code="project_code",
+        model_name="model_name",
+        plan_name="plan_name",
+        update_payload=[
+          {
+            "name": "customer_id",
+            "description": "Unique identifier for the customer.\n\nPROFILE:\n- Type: integer\n- Null: 0%\n- Unique: 100%\n- Range: 1 to 1250"
+          }
+        ]
+      )
+      ```
+   
+   e. Update the plan with completed status and preview data:
+   ```python
+   # CORRECT FORMAT for updating with completed status
+   update_plan_model_build_progress(
+     plan_id="36055042639125708",
+     model_name="stg_products",
+     status="completed",  # or "failed" if there was an error
+     # Include these even if null to avoid ModelBuildResult errors
+     error_message=None,
+     preview_data={"columns": ["id", "name"], "rows": [{"id": 1, "name": "test"}]}
+   )
+   ```
+
+## Important: Avoiding Common Errors
+
+1. **Always include all required parameters** when calling `update_plan_model_build_progress`:
+   - `plan_id` - The ID of the plan
+   - `model_name` - The name of the model being built
+   - `status` - One of: "pending", "in_progress", "completed", "failed", "skipped"
+   - `error_message` - Pass as `None` if not applicable
+   - `preview_data` - Use the preview data directly from the build_model response
+
+2. **Do not nest parameters** inside objects or use complex structures - the API expects flat key-value pairs
+
+## Best Practices for Model Building
+
+1. **Authentication**: Always include the authorization token in requests
+2. **Dependency Checking**: Before building a model, verify all its dependencies were built successfully
+3. **Error Handling**: Handle errors gracefully and update the plan accordingly
+4. **Status Updates**: Provide regular updates to the user about the build progress
+
+## Dependency Handling
+
+When processing models in the build order:
+
+1. Check if any dependencies have failed before building a model
+2. If dependencies failed, mark the model as SKIPPED without attempting to build it
+
+## Key API Endpoints and Tools
+
+1. **get_plan_details** - Get the plan details including build order
+2. **build_model** - Build a model and get results directly (compiled SQL, preview data, columns)
+3. **update_plan_model_build_progress** - Update the build status of a model
+4. **update_model_columns** - Update column descriptions with profile data
+
+## Important Implementation Notes:
+
+1. **Authentication**: Make sure to include the Bearer token in API requests
+2. **Error Handling**: Robust error handling is critical for operations
+3. **Dependency Checking**: Before building a model, verify all its dependencies were built successfully
+4. **Progress Updates**: Provide regular feedback to the user about the build process
+5. **Graceful Recovery**: If the process is interrupted, it should be able to resume from where it left off
+6. **Profile Storage**: Always store profile data in column descriptions after successful builds
+   - **NEVER** skip profiling any model
+   - **ALWAYS** update column descriptions with profile data for every model

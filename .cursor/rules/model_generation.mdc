@@ -1,0 +1,255 @@
+---
+description: 
+globs: 
+alwaysApply: true
+---
+# MCP Data Model Workflow
+
+## Description
+This consolidated rule defines the complete workflow for data model creation, management and execution in MCP.
+
+---
+
+## Complete Model Workflow
+
+### 1. Project Setup & Metadata
+- When a user provides a project code and business needs, first verify project existence
+- Call `mcp_get_project_metadata` to check if project exists
+- If not found, use `mcp_list_projects` to show available projects
+- Get user to confirm the correct project code
+
+### 2. Local Project Download
+- ALWAYS download the project locally before any modeling operations:
+  ```bash
+  python3 cli.py project download <project_code>
+  ```
+- This ensures you have the complete context of existing models
+
+### 3. Source Table Discovery
+- **PREFERRED METHOD**: Use CLI to list available database tables and cache them locally:
+  ```bash
+  python3 cli.py project list-sources <project_code>
+  ```
+  This command will:
+  - Fetch all available database tables and views
+  - Cache the response as JSON for future reference
+  - Generate individual YAML files for each database with table/column information
+  - Store cached files in `local-source-databases/<project_code>/`
+
+- **Alternative**: Call `list_raw_sources` MCP tool to get available database tables:
+  ```python
+  raw_sources = list_raw_sources(project_code="<project_code>")
+  ```
+- **For refreshing sources**: Use CLI to ensure you have the latest source tables data:
+  ```bash
+  python3 cli.py project refresh-sources <project_code>
+  ```
+- After getting sources, analyze available tables relevant to the business needs
+- Review the generated YAML files in `local-source-databases/<project_code>/` to understand table structures
+
+### 4. Data Plan Creation
+## CRITICAL: ALWAYS Generate Local Files BEFORE Creating Plans
+## CRITICAL: Do not create sub-directory under current <project-code> directory
+## MANDATORY: Do not create new local models outside of current <project-code> directory
+
+
+When a user asks to create a plan or generate models, the AI MUST ALWAYS:
+
+1. **First generate local model files for review, but don't create them under any sub-directory**
+2. **Only create the plan on the server after user approval**
+
+This workflow is NON-OPTIONAL and MUST be followed for ALL plan creation requests.
+
+## Workflow Steps
+
+### Step 1: Generate Models Locally (REQUIRED)
+When the user asks to create a plan or generate models, IMMEDIATELY:
+
+1. Extract model definitions and dependencies from the request
+2. Explicitly tell the user where to find the generated files
+3. Ask for user review and approval
+
+### Step 2: User Review (MANDATORY)
+After generating local files:
+
+1. Tell the user exactly where to find the files:
+   ```
+   I've generated model files locally in:
+   local-model-projects/PROJECT_CODE/models/
+   ```
+2. Ask the user to review the files and provide feedback
+3. Wait for explicit approval before proceeding
+
+### Step 3: Only Create Plan After Approval
+Only after receiving explicit user approval:
+
+1. Read the SQL content from the local model files
+2. Create the plan on the server using the approved SQL
+
+
+- Clearly communicate the model structure with ASCII visualization:
+  ```text
+  [orders *]         [customers *]         [order_items]   [products]
+      |                |                     |              |
+      v                v                     v              v
+  [stg_orders *]    [stg_customers *]   [stg_data]      [stg_products]
+      |                |                     |              |
+      +-----------------+                    +---------------+
+              |                                     |                                    v                                     v            
+              +-------------------------------------+ 
+                    [int_customer_orders]                                  
+                                |                                           
+                                v                                           
+                    [mart_customer_gmv] 
+  ```
+- Tell user exactly where to find the local files:
+  ```
+  I've generated model files for your review in:
+  local-model-projects/<project_code>/models/
+  ```
+- Wait for explicit user approval before proceeding
+
+### 5. Source Model Creation
+- ALWAYS use `import_source_models` for source tables instead of manual SQL creation
+- Identify tables from previous source discovery that match business needs
+- Create source models for these tables:
+  ```python
+  imported_models = import_source_models(
+      project_code="<project_code>",
+      table_ids=[101, 102]  # IDs from list_raw_sources response
+  )
+  ```
+- Source models will automatically follow the pattern `select * from {{ source("schema_name", "schema_name") }}`
+
+### 6. Refresh Local Project
+- Download the project again to get the newly created source models:
+  ```bash
+  python3 cli.py project download <project_code>
+  ```
+- This ensures consistency between local files and server state
+
+### 7. Create Data Models
+- Follow the model hierarchy: staging → intermediate → mart
+- For each model:
+  - Present SQL to user for approval
+  - Include prompt: "Would you like to proceed with creating this model? You can make changes to it before continuing."
+  - Wait for user confirmation
+  - Create model after approval:
+    ```python
+    create_model(
+        project_code="<project_code>",
+        name="model_name",
+        content="SQL_CONTENT",
+        description="Model description"
+    )
+    ```
+- Follow proper SQL patterns for each model type:
+  - Staging models: source CTE → transformation CTE → final SELECT
+  - Intermediate models: Join related staging data with explicit conditions
+  - Mart models: Business metrics and KPIs with proper aggregations
+
+### 8. Final Plan Approval
+- Present complete plan visualization with indicators:
+  - `*` for new models
+  - `^` for modified models
+  - `~` for models to be deleted
+- Ask user: "Do you approve this plan? Please confirm with 'yes' to proceed."
+- Wait for explicit user confirmation
+
+### 9. Handle User Decision
+- If approved (`yes`):
+  - AUTOMATICALLY commit all changes to local git:
+    ```bash
+    # Check what files have changed
+    python3 cli.py git status <project_code>
+    
+    # Commit all changes with descriptive message using the new commit command
+    python3 cli.py project commit <project_code> --auto-commit "Update models: $(date +%Y-%m-%d) - Implement business requirements"
+    ```
+  - This git commit step is MANDATORY and must happen immediately after user approval
+  - The commit ensures all local changes are properly tracked before server synchronization
+  - After successful commit, use MCP tools (create_model, update_model) to sync individual models to server
+  - Proceed to execution only after successful commit
+- If rejected (not `yes`):
+  - Clearly identify which models to revoke
+  - For each model to revoke, ask for confirmation then delete:
+    ```python
+    delete_model(
+        project_code="<project_code>",
+        model_name="model_to_delete"
+    )
+    ```
+
+### 10. Execute the Plan
+- Build models in dependency order (left-to-right)
+- For each model:
+  - Mark as "in_progress" with update_plan_model_build_progress
+  - Build the model:
+    ```python
+    build_result = build_model(
+        project_code="<project_code>",
+        model_name="model_name"
+    )
+    ```
+  - Profile the model data:
+    - Analyze distributions, null percentages, unique values
+    - Format structured descriptions with profile data
+  - Update column descriptions with profile data:
+    ```python
+    update_model_columns(
+        project_code="<project_code>",
+        model_name="model_name",
+        update_payload=[
+            {
+                "name": "column_name",
+                "description": "Description with PROFILE section"
+            }
+        ]
+    )
+    ```
+  - Mark as "completed" with preview data
+  - Handle any errors by reporting issues and suggesting troubleshooting steps
+
+## Critical Rules for Model Creation
+
+### SQL Generation Guidelines
+- For source references:
+  - ALWAYS use `{{ source("schema_name", "table_name") }}` syntax
+  - NEVER use direct database/schema references like `database.schema.table_name`
+  - Use schema_name from list_raw_sources if available, otherwise use database_name
+- For model references:
+  - ALWAYS use `{{ ref("model_name") }}` syntax
+  - NEVER use `ref()` to reference raw tables
+  - NEVER use `source()` to reference models
+
+### Model Best Practices
+- Follow naming conventions:
+  - Source models: Match table names or use src_* prefix
+  - Staging models: stg_* prefix
+  - Intermediate models: int_* prefix 
+  - Mart models: mart_* prefix
+- Include appropriate column types and transformations
+- Use descriptive column aliases for clarity
+- Document business logic in model descriptions
+
+### Source Model Rules
+- Source models MUST be created with `import_source_models` tool
+- NEVER manually create source models with SQL and `create_model`
+- For models with names starting with "src_", identify matching raw tables and use import_source_models
+
+### Plan Execution Rules
+- Build models in dependency order (source → staging → intermediate → mart)
+- For each model:
+  - Profile the model data
+  - Store profile data in column descriptions
+  - Update build progress with appropriate status
+  - Include preview data for completed models
+  - Include error messages for failed models
+
+## Important Workflow Reminders
+1. ALWAYS generate local model files BEFORE creating a plan on the server
+2. ALWAYS get user approval before creating models or plans
+3. NEVER use direct database/schema references in SQL
+4. ALWAYS commit changes to git before finalizing
+5. ALWAYS build models in dependency order
+6. ALWAYS profile models and update column descriptions with profile data 
