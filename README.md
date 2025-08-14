@@ -1,4 +1,4 @@
-# Deprecate - ReOrc MCP Client 
+# DEPRECATED - ReOrc MCP Client 
 
 Client for ReOrc's Model Creation Platform (MCP).
 
